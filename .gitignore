@@ -1,2 +1,6 @@
 /utils/data/
 /core/migrations/
+/venv/
+.idea/
+__pycache__/
+core/__pycache__/
