@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from core.serializers import UserSerializer, MovieSerializer
+import random
 
 from django.contrib.auth import authenticate
 from core.models import Ratings, Movie
@@ -92,13 +93,6 @@ class GetRecommendation(APIView):
 
         return ratings, movie_new_indexes, rev_movie_new_indexes, user_new_indexes, rev_user_new_indexes
 
-    def item_shape(self):
-        with connection.cursor() as cursor:
-            cursor.execute('select max(t.id) from core_movie as t;')
-            row = cursor.fetchone()
-
-        return row[0]
-
     def fast_similarity(self, ratings, epsilon=1e-9):
         print(ratings.shape)
         sim = ratings.dot(ratings.T) + epsilon
@@ -113,7 +107,7 @@ class GetRecommendation(APIView):
 
         movie_id = 0
         for rate in pred:
-            if ratings[user_id][movie_id] == 0 and rate > 3:
+            if ratings[user_id][movie_id] == 0 and rate >= 2:
                 not_watched[movie_id] = rate
             movie_id += 1
 
@@ -129,26 +123,47 @@ class GetRecommendation(APIView):
             pred[j] /= np.sum(np.abs(similarity[user_id, :][top_k_users]))
         return pred
 
+    def get_popular_films(self):
+        query = 'select movie_id, AVG(rating) as avg_rate from core_ratings group by movie_id order by AVG(rating) DESC;'
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+        rows = rows[0:1000]
+        rand_list = random.sample(rows, 50)
+        popular_films = []
+        for film in rand_list:
+            popular_films.append(int(film[0]))
+
+        return popular_films
+
     def get(self, request, format=None):
         r = request.auth
         user = request.user
 
+        old_movie_ids = []
+
         ratings, movie_new_indexes, rev_movie_new_indexes, user_new_indexes, rev_user_new_indexes = self.get_ratings(
             user.id, 10)
 
-        user_similarity = self.fast_similarity(ratings)
+        popular_films = self.get_popular_films()
 
-        user_pred = self.predict_topk(ratings, user_similarity, user_new_indexes[user.id])
+        if len(ratings) != 0:
+            user_similarity = self.fast_similarity(ratings)
+            user_pred = self.predict_topk(ratings, user_similarity, user_new_indexes[user.id])
+            movie_ids = self.get_best_films(ratings, user_pred, user_new_indexes[user.id])
+            for movie_id in movie_ids:
+                old_movie_ids.append(rev_movie_new_indexes[movie_id[0]])
 
-        movie_ids = self.get_best_films(ratings, user_pred, user_new_indexes[user.id])
-
-        old_movie_ids = []
-        for movie_id in movie_ids:
-            old_movie_ids.append(rev_movie_new_indexes[movie_id[0]])
+        if len(old_movie_ids) < 50:
+            for i in range(50 - len(old_movie_ids)):
+                old_movie_ids.append(popular_films[i])
 
         old_movie_ids = old_movie_ids[0:50]
 
         content = {
-            'movie_ids': json.dumps(old_movie_ids)
+            'movie_ids': json.dumps(old_movie_ids),
+            'addition_info': len(old_movie_ids)
         }
+
         return Response(content)

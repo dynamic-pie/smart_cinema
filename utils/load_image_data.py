@@ -8,6 +8,7 @@ def get_poster_url(imdb_id):
         answer = requests.get(url)
         return answer.json()['Poster']
     except:
+        print('error {}'.format(imdb_id))
         return 'http://www.no.com'
 
 def insert_poster(movie_id, imdb_id, poster_url, cursor):
