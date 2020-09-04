@@ -89,8 +89,10 @@ def main():
     movies = pd.read_csv(path_data + "/movies.csv")
     ratings = pd.read_csv(path_data + "/ratings.csv")
     links = pd.read_csv(path_data + "/links.csv", dtype={'imdbId':object})
+    posters = pd.read_csv(path_data + "/images.csv", sep='|')
 
     movies = movies.merge(links, left_on='movieId', right_on='movieId')
+    movies = movies.merge(posters, left_on='movieId', right_on='movieId')
 
     movies['year'] = movies.title.str.extract("\((\d{4})\)", expand=True)
     movies.year = pd.to_datetime(movies.year, format='%Y')
@@ -104,7 +106,7 @@ def main():
     truncate(cursor)
     conn.commit()
 
-    cursor.execute('SELECT movie_id, poster_url FROM core_poster')
+    cursor.execute('SELECT movie_id, imdb_id, poster_url FROM core_poster')
     records = cursor.fetchall()
 
     genre_map = {}
@@ -123,7 +125,7 @@ def main():
         else:
             year = '1900-01-01'
 
-        insert_movie(movie.movieId, movie.title, year, 'summary', movie.imdbId, records[count][1], cursor)
+        insert_movie(movie.movieId, movie.title, year, 'summary', movie.imdbId, movie.poster, cursor)
         movie_genre = movie.genres.split('|')
         for genre in movie_genre:
             insert_moviegenre(movie.movieId, genre_map[genre], cursor)
