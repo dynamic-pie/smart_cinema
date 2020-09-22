@@ -58,6 +58,7 @@ def truncate(cursor):
     truncate table core_moviegenre RESTART IDENTITY cascade;
     truncate table core_ratings RESTART IDENTITY cascade;
     truncate table auth_user RESTART IDENTITY cascade;
+    truncate table core_hall RESTART IDENTITY cascade;
     '''
     cursor.execute(query)
 
@@ -85,7 +86,7 @@ def main():
     conn = psycopg2.connect(dbname=database_name, user=username,
                             password=password, host=host)
 
-    path_data = '/Users/dynamic-pie/smart_cinema/utils/data'
+    path_data = './utils/data'
     movies = pd.read_csv(path_data + "/movies.csv")
     ratings = pd.read_csv(path_data + "/ratings.csv")
     links = pd.read_csv(path_data + "/links.csv", dtype={'imdbId':object})

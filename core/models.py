@@ -36,23 +36,22 @@ class Hall(models.Model):
     summary = models.TextField()
 
 
-class Place(models.Model):
-    hall = models.ForeignKey(Hall, on_delete=models.CASCADE)
-    row_number = models.SmallIntegerField()
-    column_number = models.SmallIntegerField()
-
-
 class Session(models.Model):
     hall = models.ForeignKey(Hall, on_delete=models.CASCADE)
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE)
     release_date = models.DateTimeField()
 
 
+class Place(models.Model):
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, default=None)
+    row_number = models.SmallIntegerField()
+    column_number = models.SmallIntegerField()
+
+
 class Ticket(models.Model):
     place = models.ForeignKey(Place, on_delete=models.CASCADE)
     status = models.BooleanField()
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    session = models.ManyToManyField(Session)
 
 
 class Poster(models.Model):

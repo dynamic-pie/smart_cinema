@@ -6,14 +6,16 @@ from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from core.serializers import UserSerializer, MovieSerializer
+from rest_framework.renderers import JSONRenderer
 import random
 
 from django.contrib.auth import authenticate
-from core.models import Ratings, Movie
+from core.models import Ratings, Movie, Session, Hall
 from django.db import connection
 
 import numpy as np
 import json
+from datetime import datetime
 
 rating_model_cache = len(Ratings.objects.all())
 
@@ -155,15 +157,152 @@ class GetRecommendation(APIView):
             for movie_id in movie_ids:
                 old_movie_ids.append(rev_movie_new_indexes[movie_id[0]])
 
-        if len(old_movie_ids) < 50:
+        if len(old_movie_ids) < 20:
             for i in range(50 - len(old_movie_ids)):
                 old_movie_ids.append(popular_films[i])
 
-        old_movie_ids = old_movie_ids[0:50]
+        old_movie_ids = old_movie_ids[0:20]
+
+        movies = []
+
+        for i in old_movie_ids:
+            movies.append(MovieSerializer(Movie.objects.get(id=i)).data)
 
         content = {
-            'movie_ids': json.dumps(old_movie_ids),
-            'addition_info': len(old_movie_ids)
+            'movies': movies
+        }
+
+        return Response(content)
+
+
+class SetMark(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        user = request.user
+        mark = self.request.query_params.get('mark', None)
+        movie_id = self.request.query_params.get('movie_id', None)
+
+        query = 'INSERT INTO core_ratings (rating, timestamp, movie_id, user_id) ' \
+                'VALUES ({}, \'{}\', \'{}\', {})'.format(mark, str(datetime.date(datetime.now())), movie_id, user.id)
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+
+        content = {
+            'status': 'ok'
+        }
+
+        return Response(content)
+
+
+class GetMovies(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_popular_films(self):
+        query = 'select movie_id, AVG(rating) as avg_rate from core_ratings group by movie_id order by AVG(rating) DESC;'
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+        rows = rows[0:1000]
+        rand_list = random.sample(rows, 50)
+        popular_films = []
+        for film in rand_list:
+            popular_films.append(int(film[0]))
+
+        return popular_films
+
+    def get(self, request, format=None):
+        popular_films = self.get_popular_films()
+        movies = []
+
+        for i in popular_films:
+            movies.append(MovieSerializer(Movie.objects.get(id=i)).data)
+
+        content = {
+            'movies': movies
+        }
+
+        return Response(content)
+
+
+class GetSessions(APIView):
+    def get(self, request, format=None):
+        sessions = Session.objects.all()
+        sessions_id = []
+        for session in sessions:
+            sessions_id.append({
+                'movie_id': session.movie_id,
+                'session_id': session.id
+            })
+
+        movies = []
+        for i in sessions_id:
+            movies.append(
+                {
+                    'movie': MovieSerializer(Movie.objects.get(id=i['movie_id'])).data,
+                    'session_id': i['session_id']
+                }
+            )
+
+        content = {
+            'movies': movies
+        }
+
+        return Response(content)
+
+
+class BuyTicket(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        user_id = request.user.id
+        session_id = self.request.query_params.get('session_id', None)
+        row = self.request.query_params.get('x', None)
+        column = self.request.query_params.get('y', None)
+
+        query1 = 'INSERT INTO core_place (row_number, column_number, session_id) VALUES ({}, {}, {})'.format(row, column, session_id)
+        with connection.cursor() as cursor:
+            cursor.execute(query1)
+
+        content = {
+            'status': 'ok'
+        }
+
+        return Response(content)
+
+
+class GetSessionInfo(APIView):
+    def get(self, request, format=None):
+        user_id = request.user.id
+        session_id = self.request.query_params.get('session_id', None)
+
+        query1 = 'SELECT row_number, column_number FROM core_place WHERE session_id = {}'.format(session_id)
+
+        places = []
+        with connection.cursor() as cursor:
+            cursor.execute(query1)
+            rows = cursor.fetchall()
+
+        max_column = Session.objects.get(id=session_id).hall.column_count
+        max_row = Session.objects.get(id=session_id).hall.row_count
+
+        for row in rows:
+            places.append(
+                {
+                    'x': int(row[0]),
+                    'y': int(row[1])
+                }
+            )
+
+        content = {
+            'busy': places,
+            'max_y': max_column,
+            'max_x': max_row
         }
 
         return Response(content)
